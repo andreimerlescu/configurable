@@ -6,6 +6,7 @@ import (
 	`flag`
 	`fmt`
 	`os`
+	`path/filepath`
 	`reflect`
 	`strconv`
 	`strings`
@@ -146,7 +147,7 @@ func (c *Configurable) LoadFile(filename string) error {
 	if err != nil {
 		return err
 	}
-	ext := reflect.ValueOf(filename).Type().String()
+	ext := filepath.Ext(filepath.Base(filename))
 	switch ext {
 	case ".json":
 		var jsonData map[string]interface{}
