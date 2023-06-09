@@ -1,4 +1,4 @@
-module configurable
+module github.com/andreimerlescu/configurable
 
 go 1.20
 
