@@ -229,10 +229,14 @@ func (c *Configurable) Usage() string {
 	builder.WriteString(fmt.Sprintf("%v [FLAGS]\n", os.Args[0]))
 	builder.WriteString("Flag\tDefault\tDescription\tSource\n")
 
-	nl, dl, ul, sl := 4, 7, 11, 6 // length of "Source"
-	out := ""
-
+	flags := make([]*flag.Flag, 0)
 	flag.VisitAll(func(f *flag.Flag) {
+		flags = append(flags, f)
+	})
+
+	nl, dl, ul, sl := 4, 7, 11, 6
+
+	for _, f := range flags {
 		source := "flag"
 		if _, exists := os.LookupEnv(f.Name); exists {
 			source = "env"
@@ -247,7 +251,8 @@ func (c *Configurable) Usage() string {
 			}
 		}
 
-		out += fmt.Sprintf("-%s\t%s\t%s\t%s\n", f.Name, f.DefValue, f.Usage, source)
+		builder.WriteString(fmt.Sprintf("-%-*s\t%-*s\t%-*s\t%s\n", nl, f.Name, dl, f.DefValue, ul, f.Usage, source))
+
 		if len(f.Name)+1 > nl {
 			nl = len(f.Name) + 1
 		}
@@ -260,10 +265,9 @@ func (c *Configurable) Usage() string {
 		if len(source) > sl {
 			sl = len(source)
 		}
-	})
+	}
 
 	builder.WriteString(fmt.Sprintf("%v\t%v\t%v\t%v\n", strings.Repeat("-", nl), strings.Repeat("-", dl), strings.Repeat("-", ul), strings.Repeat("-", sl)))
-	builder.WriteString(out)
 
 	return builder.String()
 }
