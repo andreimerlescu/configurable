@@ -45,7 +45,7 @@ type Configurable struct {
 	err   error
 }
 
-func NewConfigurable() IConfigurable {
+func New() IConfigurable {
 	return &Configurable{flags: make(map[string]interface{})}
 }
 

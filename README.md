@@ -25,7 +25,7 @@ import "github.com/andreimerlescu/configurable"
 To get started, you need to create an instance of the Configurable struct by calling the `NewConfigurable()` function:
 
 ```go
-config := configurable.NewConfigurable()
+config := configurable.New()
 ```
 
 ### Defining Configuration Variables

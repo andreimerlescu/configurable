@@ -11,7 +11,7 @@ import (
 func TestConfigurable(t *testing.T) {
 	os.Clearenv()
 
-	conf := NewConfigurable()
+	conf := New()
 
 	t.Run("test NewInt and Int", func(t *testing.T) {
 		// Register an integer flag with a default value
