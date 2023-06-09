@@ -227,7 +227,6 @@ func (c *Configurable) Usage() string {
 	var builder strings.Builder
 
 	builder.WriteString(fmt.Sprintf("%v [FLAGS]\n", os.Args[0]))
-	builder.WriteString("Flag\tDefault\tDescription\tSource\n")
 
 	flags := make([]*flag.Flag, 0)
 	flag.VisitAll(func(f *flag.Flag) {
@@ -250,9 +249,6 @@ func (c *Configurable) Usage() string {
 				source = "ini"
 			}
 		}
-
-		builder.WriteString(fmt.Sprintf("-%-*s\t%-*s\t%-*s\t%s\n", nl, f.Name, dl, f.DefValue, ul, f.Usage, source))
-
 		if len(f.Name)+1 > nl {
 			nl = len(f.Name) + 1
 		}
@@ -267,7 +263,43 @@ func (c *Configurable) Usage() string {
 		}
 	}
 
-	builder.WriteString(fmt.Sprintf("%v\t%v\t%v\t%v\n", strings.Repeat("-", nl), strings.Repeat("-", dl), strings.Repeat("-", ul), strings.Repeat("-", sl)))
+	builder.WriteString(
+		fmt.Sprintf("Flag%v\tDefault%v\tDescription%v\tSource%v\n",
+			strings.Repeat(" ", min_zero(nl-4)),
+			strings.Repeat(" ", min_zero(dl-7)),
+			strings.Repeat(" ", min_zero(ul-11)),
+			strings.Repeat(" ", min_zero(sl-6))))
+	builder.WriteString(
+		fmt.Sprintf("%v\t%v\t%v\t%v\n",
+			strings.Repeat("-", min_zero(nl)),
+			strings.Repeat("-", min_zero(dl)),
+			strings.Repeat("-", min_zero(ul)),
+			strings.Repeat("-", min_zero(sl))))
+
+	for _, f := range flags {
+		source := "flag"
+		if _, exists := os.LookupEnv(f.Name); exists {
+			source = "env"
+		} else if c.flags[f.Name] != nil {
+			switch c.flags[f.Name].(type) {
+			case *json.RawMessage:
+				source = "json"
+			case *yaml.Node:
+				source = "yaml"
+			case *ini.Key:
+				source = "ini"
+			}
+		}
+		builder.WriteString(fmt.Sprintf("-%-*s\t%-*s\t%-*s\t%s\n", nl, f.Name, dl, f.DefValue, ul, f.Usage, source))
+	}
 
 	return builder.String()
+}
+
+func min_zero(number int) int {
+	if number < 0 {
+		return 0
+	} else {
+		return number
+	}
 }
