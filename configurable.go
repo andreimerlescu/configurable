@@ -171,10 +171,10 @@ func (c *Configurable) LoadFile(filename string) error {
 				valueString, isString := value.(string)
 				if isString && (valueString == "true" || valueString == "false") {
 					if valueString == "true" {
-						reflect.ValueOf(c.flags[key]).Elem().Set(true)
+						reflect.ValueOf(c.flags[key]).Elem().Set(reflect.ValueOf(true))
 					}
 					if valueString == "false" {
-						reflect.ValueOf(c.flags[key]).Elem().Set(false)
+						reflect.ValueOf(c.flags[key]).Elem().Set(reflect.ValueOf(false))
 					}
 				} else {
 					reflect.ValueOf(c.flags[key]).Elem().Set(reflect.ValueOf(value))
