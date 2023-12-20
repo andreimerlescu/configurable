@@ -168,18 +168,12 @@ func (c *Configurable) LoadFile(filename string) error {
 		}
 		for key, value := range yamlData {
 			if c.flags[key] != nil {
-				valueString, isString := value.(string)
-				if isString && (valueString == "true" || valueString == "false") {
-					if valueString == "true" {
-						reflect.ValueOf(c.flags[key]).Elem().Set(reflect.ValueOf(true))
-					}
-					if valueString == "false" {
-						reflect.ValueOf(c.flags[key]).Elem().Set(reflect.ValueOf(false))
-					}
-				} else {
+				switch v := value.(type) {
+				case bool:
+					reflect.ValueOf(c.flags[key]).Elem().Set(reflect.ValueOf(v))
+				default:
 					reflect.ValueOf(c.flags[key]).Elem().Set(reflect.ValueOf(value))
 				}
-				
 			}
 		}
 	case ".ini":
