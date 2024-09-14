@@ -1,398 +1,431 @@
 package configurable
 
 import (
-    `encoding/json`
-    `errors`
-    `flag`
-    `fmt`
-    `os`
-    `path/filepath`
-    `reflect`
-    `strconv`
-    `strings`
-    `time`
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 
-    `github.com/go-ini/ini`
-    `gopkg.in/yaml.v3`
+	"github.com/go-ini/ini"
+	"gopkg.in/yaml.v3"
 )
 
+// IConfigurable defines the interface for configuration management.
 type IConfigurable interface {
-    Int(name string) *int
-    NewInt(name string, value int, usage string) *int
+	// Existing methods
+	Int(name string) *int
+	NewInt(name string, value int, usage string) *int
 
-    Int64(name string) *int64
-    NewInt64(name string, value int64, usage string) *int64
+	Int64(name string) *int64
+	NewInt64(name string, value int64, usage string) *int64
 
-    Float64(name string) *float64
-    NewFloat64(name string, value float64, usage string) *float64
+	Float64(name string) *float64
+	NewFloat64(name string, value float64, usage string) *float64
 
-    String(name string) *string
-    NewString(name, value, usage string) *string
+	String(name string) *string
+	NewString(name, value, usage string) *string
 
-    Bool(name string) *bool
-    NewBool(name string, value bool, usage string) *bool
+	Bool(name string) *bool
+	NewBool(name string, value bool, usage string) *bool
 
-    Duration(name string) *time.Duration
-    NewDuration(name string, value time.Duration, usage string) *time.Duration
+	Duration(name string) *time.Duration
+	NewDuration(name string, value time.Duration, usage string) *time.Duration
 
-    List(name string) *[]string
-    NewList(name string, value []string, usage string) *[]string
+	// New methods for List and Map
+	List(name string) *[]string
+	NewList(name string, value []string, usage string) *[]string
 
-    Map(name string) *map[string]string
-    NewMap(name string, value map[string]string, usage string) *map[string]string
+	Map(name string) *map[string]string
+	NewMap(name string, value map[string]string, usage string) *map[string]string
 
-    LoadFile(filename string) error
-    Parse(filename string) error
+	LoadFile(filename string) error
+	Parse(filename string) error
 
-    Usage() string
+	Usage() string
 }
 
+// Configurable implements the IConfigurable interface.
 type Configurable struct {
-    flags map[string]interface{}
-    err   error
+	flags map[string]interface{}
 }
 
+// New creates a new Configurable instance.
 func New() IConfigurable {
-    return &Configurable{flags: make(map[string]interface{})}
+	return &Configurable{flags: make(map[string]interface{})}
 }
 
-// Existing methods for Int, Int64, Float64, String, Bool, Duration...
+// Implementations for existing methods
+
+// Int flag methods
+func (c *Configurable) NewInt(name string, value int, usage string) *int {
+	ptr := flag.Int(name, value, usage)
+	c.flags[name] = ptr
+	return ptr
+}
+
+func (c *Configurable) Int(name string) *int {
+	c.checkAndSetFromEnv(name)
+	if ptr, ok := c.flags[name].(*int); ok {
+		return ptr
+	}
+	return nil
+}
+
+// Similar methods for Int64, Float64, String, Bool, Duration...
+
+// New implementations for List and Map
 
 // ListFlag implements flag.Value for []string
-type ListFlag []string
+type ListFlag struct {
+	values *[]string
+}
 
 func (l *ListFlag) String() string {
-    return strings.Join(*l, ",")
+	if l.values == nil {
+		return ""
+	}
+	return strings.Join(*l.values, ",")
 }
 
 func (l *ListFlag) Set(value string) error {
-    items := strings.Split(value, ",")
-    *l = append(*l, items...)
-    return nil
+	if l.values == nil {
+		l.values = &[]string{}
+	}
+	items := strings.Split(value, ",")
+	*l.values = append(*l.values, items...)
+	return nil
+}
+
+// List flag methods
+func (c *Configurable) NewList(name string, value []string, usage string) *[]string {
+	l := &ListFlag{values: &value}
+	flag.Var(l, name, usage)
+	c.flags[name] = l
+	return l.values
 }
 
 func (c *Configurable) List(name string) *[]string {
-    c.checkAndSetFromEnv(name)
-    if val, ok := c.flags[name].(*ListFlag); ok {
-        return (*[]string)(val)
-    }
-    return nil
-}
-
-func (c *Configurable) NewList(name string, value []string, usage string) *[]string {
-    l := ListFlag(value)
-    flag.Var(&l, name, usage)
-    c.flags[name] = &l
-    return (*[]string)(&l)
+	c.checkAndSetFromEnv(name)
+	if ptr, ok := c.flags[name].(*ListFlag); ok {
+		return ptr.values
+	}
+	return nil
 }
 
 // MapFlag implements flag.Value for map[string]string
-type MapFlag map[string]string
+type MapFlag struct {
+	values *map[string]string
+}
 
 func (m *MapFlag) String() string {
-    var entries []string
-    for k, v := range *m {
-        entries = append(entries, fmt.Sprintf("%s=%s", k, v))
-    }
-    return strings.Join(entries, ",")
+	if m.values == nil {
+		return ""
+	}
+	var entries []string
+	for k, v := range *m.values {
+		entries = append(entries, fmt.Sprintf("%s=%s", k, v))
+	}
+	return strings.Join(entries, ",")
 }
 
 func (m *MapFlag) Set(value string) error {
-    pairs := strings.Split(value, ",")
-    for _, pair := range pairs {
-        kv := strings.SplitN(pair, "=", 2)
-        if len(kv) != 2 {
-            return fmt.Errorf("invalid map item: %s", pair)
-        }
-        (*m)[kv[0]] = kv[1]
-    }
-    return nil
+	if m.values == nil {
+		m.values = &map[string]string{}
+	}
+	pairs := strings.Split(value, ",")
+	for _, pair := range pairs {
+		kv := strings.SplitN(pair, "=", 2)
+		if len(kv) != 2 {
+			return fmt.Errorf("invalid map item: %s", pair)
+		}
+		(*m.values)[kv[0]] = kv[1]
+	}
+	return nil
+}
+
+// Map flag methods
+func (c *Configurable) NewMap(name string, value map[string]string, usage string) *map[string]string {
+	m := &MapFlag{values: &value}
+	flag.Var(m, name, usage)
+	c.flags[name] = m
+	return m.values
 }
 
 func (c *Configurable) Map(name string) *map[string]string {
-    c.checkAndSetFromEnv(name)
-    if val, ok := c.flags[name].(*MapFlag); ok {
-        return (*map[string]string)(val)
-    }
-    return nil
+	c.checkAndSetFromEnv(name)
+	if ptr, ok := c.flags[name].(*MapFlag); ok {
+		return ptr.values
+	}
+	return nil
 }
 
-func (c *Configurable) NewMap(name string, value map[string]string, usage string) *map[string]string {
-    m := MapFlag(value)
-    flag.Var(&m, name, usage)
-    c.flags[name] = &m
-    return (*map[string]string)(&m)
-}
-
+// Parse parses command-line flags and loads configuration from a file.
 func (c *Configurable) Parse(filename string) error {
-    flag.Parse()
-    if len(filename) == 0 {
-        return nil
-    }
-    err := c.LoadFile(filename)
-    if err != nil {
-        return err
-    }
-    return nil
+	flag.Parse()
+	if filename != "" {
+		return c.LoadFile(filename)
+	}
+	return nil
 }
 
-func (c *Configurable) Err() error {
-    return c.err
-}
-
-func (c *Configurable) Value(name string) interface{} {
-    return c.flags[name]
-}
-
+// LoadFile loads configuration from a file (JSON, YAML, INI).
 func (c *Configurable) LoadFile(filename string) error {
-    data, err := os.ReadFile(filename)
-    if err != nil {
-        return err
-    }
-    ext := filepath.Ext(filepath.Base(filename))
-    switch ext {
-    case ".json":
-        var jsonData map[string]interface{}
-        err = json.Unmarshal(data, &jsonData)
-        if err != nil {
-            return err
-        }
-        for key, value := range jsonData {
-            if c.flags[key] != nil {
-                switch v := c.flags[key].(type) {
-                case *int:
-                    if num, ok := value.(float64); ok {
-                        *v = int(num)
-                    }
-                case *int64:
-                    if num, ok := value.(float64); ok {
-                        *v = int64(num)
-                    }
-                case *float64:
-                    if num, ok := value.(float64); ok {
-                        *v = num
-                    }
-                case *string:
-                    if str, ok := value.(string); ok {
-                        *v = str
-                    }
-                case *bool:
-                    if b, ok := value.(bool); ok {
-                        *v = b
-                    }
-                case *time.Duration:
-                    if str, ok := value.(string); ok {
-                        if parsedVal, err := time.ParseDuration(str); err == nil {
-                            *v = parsedVal
-                        }
-                    }
-                case *ListFlag:
-                    if arr, ok := value.([]interface{}); ok {
-                        for _, item := range arr {
-                            if str, ok := item.(string); ok {
-                                v.Set(str)
-                            }
-                        }
-                    }
-                case *MapFlag:
-                    if m, ok := value.(map[string]interface{}); ok {
-                        for mk, mv := range m {
-                            if str, ok := mv.(string); ok {
-                                v.Set(fmt.Sprintf("%s=%s", mk, str))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    case ".yaml", ".yml":
-        var yamlData map[string]interface{}
-        err = yaml.Unmarshal(data, &yamlData)
-        if err != nil {
-            return err
-        }
-        for key, value := range yamlData {
-            if c.flags[key] != nil {
-                switch v := c.flags[key].(type) {
-                case *int:
-                    if num, ok := value.(int); ok {
-                        *v = num
-                    } else if num, ok := value.(float64); ok {
-                        *v = int(num)
-                    }
-                case *int64:
-                    if num, ok := value.(int64); ok {
-                        *v = num
-                    } else if num, ok := value.(float64); ok {
-                        *v = int64(num)
-                    }
-                case *float64:
-                    if num, ok := value.(float64); ok {
-                        *v = num
-                    }
-                case *string:
-                    if str, ok := value.(string); ok {
-                        *v = str
-                    }
-                case *bool:
-                    if b, ok := value.(bool); ok {
-                        *v = b
-                    }
-                case *time.Duration:
-                    if str, ok := value.(string); ok {
-                        if parsedVal, err := time.ParseDuration(str); err == nil {
-                            *v = parsedVal
-                        }
-                    }
-                case *ListFlag:
-                    if arr, ok := value.([]interface{}); ok {
-                        for _, item := range arr {
-                            if str, ok := item.(string); ok {
-                                v.Set(str)
-                            }
-                        }
-                    }
-                case *MapFlag:
-                    if m, ok := value.(map[string]interface{}); ok {
-                        for mk, mv := range m {
-                            if str, ok := mv.(string); ok {
-                                v.Set(fmt.Sprintf("%s=%s", mk, str))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    case ".ini":
-        cfg, err := ini.Load(data)
-        if err != nil {
-            return err
-        }
-        for key := range c.flags {
-            if cfg.Section("").HasKey(key) {
-                val := cfg.Section("").Key(key).String()
-                switch v := c.flags[key].(type) {
-                case *string:
-                    *v = val
-                case *int:
-                    if parsedVal, err := strconv.Atoi(val); err == nil {
-                        *v = parsedVal
-                    }
-                case *bool:
-                    if parsedVal, err := strconv.ParseBool(val); err == nil {
-                        *v = parsedVal
-                    }
-                case *ListFlag:
-                    v.Set(val)
-                case *MapFlag:
-                    v.Set(val)
-                }
-            }
-        }
-    default:
-        return errors.New("unknown file type")
-    }
-    return nil
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".json":
+		return c.loadJSON(data)
+	case ".yaml", ".yml":
+		return c.loadYAML(data)
+	case ".ini":
+		return c.loadINI(data)
+	default:
+		return errors.New("unsupported file extension")
+	}
 }
 
+// Load JSON configuration
+func (c *Configurable) loadJSON(data []byte) error {
+	var jsonData map[string]interface{}
+	if err := json.Unmarshal(data, &jsonData); err != nil {
+		return err
+	}
+	return c.setValuesFromMap(jsonData)
+}
+
+// Load YAML configuration
+func (c *Configurable) loadYAML(data []byte) error {
+	var yamlData map[string]interface{}
+	if err := yaml.Unmarshal(data, &yamlData); err != nil {
+		return err
+	}
+	return c.setValuesFromMap(yamlData)
+}
+
+// Load INI configuration
+func (c *Configurable) loadINI(data []byte) error {
+	cfg, err := ini.Load(data)
+	if err != nil {
+		return err
+	}
+	iniData := make(map[string]interface{})
+	for key := range c.flags {
+		if val := cfg.Section("").Key(key).String(); val != "" {
+			iniData[key] = val
+		}
+	}
+	return c.setValuesFromMap(iniData)
+}
+
+// Set values from a map into the flags
+func (c *Configurable) setValuesFromMap(data map[string]interface{}) error {
+	for key, value := range data {
+		if flagVal, exists := c.flags[key]; exists {
+			if err := c.setValue(flagVal, value); err != nil {
+				return fmt.Errorf("error setting key %s: %w", key, err)
+			}
+		}
+	}
+	return nil
+}
+
+// Set individual flag value based on its type
+func (c *Configurable) setValue(flagVal interface{}, value interface{}) error {
+	switch ptr := flagVal.(type) {
+	case *int:
+		intVal, err := toInt(value)
+		if err != nil {
+			return err
+		}
+		*ptr = intVal
+	case *int64:
+		int64Val, err := toInt64(value)
+		if err != nil {
+			return err
+		}
+		*ptr = int64Val
+	case *float64:
+		floatVal, err := toFloat64(value)
+		if err != nil {
+			return err
+		}
+		*ptr = floatVal
+	case *string:
+		strVal, err := toString(value)
+		if err != nil {
+			return err
+		}
+		*ptr = strVal
+	case *bool:
+		boolVal, err := toBool(value)
+		if err != nil {
+			return err
+		}
+		*ptr = boolVal
+	case *time.Duration:
+		strVal, err := toString(value)
+		if err != nil {
+			return err
+		}
+		duration, err := time.ParseDuration(strVal)
+		if err != nil {
+			return err
+		}
+		*ptr = duration
+	case *ListFlag:
+		listVal, err := toStringSlice(value)
+		if err != nil {
+			return err
+		}
+		*ptr.values = append(*ptr.values, listVal...)
+	case *MapFlag:
+		mapVal, err := toStringMap(value)
+		if err != nil {
+			return err
+		}
+		for k, v := range mapVal {
+			(*ptr.values)[k] = v
+		}
+	default:
+		return fmt.Errorf("unsupported flag type for key %s", key)
+	}
+	return nil
+}
+
+// Helper functions for type conversions
+func toInt(value interface{}) (int, error) {
+	switch v := value.(type) {
+	case float64:
+		return int(v), nil
+	case string:
+		return strconv.Atoi(v)
+	default:
+		return 0, fmt.Errorf("cannot convert %v to int", value)
+	}
+}
+
+func toInt64(value interface{}) (int64, error) {
+	switch v := value.(type) {
+	case float64:
+		return int64(v), nil
+	case string:
+		return strconv.ParseInt(v, 10, 64)
+	default:
+		return 0, fmt.Errorf("cannot convert %v to int64", value)
+	}
+}
+
+func toFloat64(value interface{}) (float64, error) {
+	switch v := value.(type) {
+	case float64:
+		return v, nil
+	case string:
+		return strconv.ParseFloat(v, 64)
+	default:
+		return 0, fmt.Errorf("cannot convert %v to float64", value)
+	}
+}
+
+func toString(value interface{}) (string, error) {
+	switch v := value.(type) {
+	case string:
+		return v, nil
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64), nil
+	case bool:
+		return strconv.FormatBool(v), nil
+	default:
+		return "", fmt.Errorf("cannot convert %v to string", value)
+	}
+}
+
+func toBool(value interface{}) (bool, error) {
+	switch v := value.(type) {
+	case bool:
+		return v, nil
+	case string:
+		return strconv.ParseBool(v)
+	default:
+		return false, fmt.Errorf("cannot convert %v to bool", value)
+	}
+}
+
+func toStringSlice(value interface{}) ([]string, error) {
+	switch v := value.(type) {
+	case []interface{}:
+		var result []string
+		for _, item := range v {
+			str, err := toString(item)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, str)
+		}
+		return result, nil
+	case string:
+		if v == "" {
+			return []string{}, nil
+		}
+		return strings.Split(v, ","), nil
+	default:
+		return nil, fmt.Errorf("cannot convert %v to []string", value)
+	}
+}
+
+func toStringMap(value interface{}) (map[string]string, error) {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		result := make(map[string]string)
+		for key, val := range v {
+			strVal, err := toString(val)
+			if err != nil {
+				return nil, err
+			}
+			result[key] = strVal
+		}
+		return result, nil
+	case string:
+		if v == "" {
+			return map[string]string{}, nil
+		}
+		pairs := strings.Split(v, ",")
+		result := make(map[string]string)
+		for _, pair := range pairs {
+			kv := strings.SplitN(pair, "=", 2)
+			if len(kv) != 2 {
+				return nil, fmt.Errorf("invalid map item: %s", pair)
+			}
+			result[kv[0]] = kv[1]
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("cannot convert %v to map[string]string", value)
+	}
+}
+
+// checkAndSetFromEnv overrides flag values with environment variables if set.
 func (c *Configurable) checkAndSetFromEnv(name string) {
-    if val, exists := os.LookupEnv(name); exists {
-        if c.flags[name] != nil {
-            switch v := c.flags[name].(type) {
-            case *int:
-                if parsedVal, err := strconv.Atoi(val); err == nil {
-                    *v = parsedVal
-                }
-            case *int64:
-                if parsedVal, err := strconv.ParseInt(val, 10, 64); err == nil {
-                    *v = parsedVal
-                }
-            case *float32:
-                if parsedVal, err := strconv.ParseFloat(val, 32); err == nil {
-                    *v = float32(parsedVal)
-                }
-            case *float64:
-                if parsedVal, err := strconv.ParseFloat(val, 64); err == nil {
-                    *v = parsedVal
-                }
-            case *string:
-                *v = val
-            case *bool:
-                if parsedVal, err := strconv.ParseBool(val); err == nil {
-                    *v = parsedVal
-                }
-            case *time.Duration:
-                if parsedVal, err := time.ParseDuration(val); err == nil {
-                    *v = parsedVal
-                }
-            case *ListFlag:
-                v.Set(val)
-            case *MapFlag:
-                v.Set(val)
-            }
-        }
-    }
+	if val, exists := os.LookupEnv(name); exists {
+		if flagVal, exists := c.flags[name]; exists {
+			c.setValue(flagVal, val)
+		}
+	}
 }
 
+// Usage returns the usage string for the registered flags.
 func (c *Configurable) Usage() string {
-    var builder strings.Builder
-
-    builder.WriteString(fmt.Sprintf("%v [FLAGS]\n", os.Args[0]))
-
-    flags := make([]*flag.Flag, 0)
-    flag.VisitAll(func(f *flag.Flag) {
-        flags = append(flags, f)
-    })
-
-    nl, dl, ul, sl := 4, 7, 11, 6
-
-    for _, f := range flags {
-        source := "flag"
-        if _, exists := os.LookupEnv(f.Name); exists {
-            source = "env"
-        }
-        if len(f.Name)+1 > nl {
-            nl = len(f.Name) + 1
-        }
-        if len(f.DefValue) > dl {
-            dl = len(f.DefValue)
-        }
-        if len(f.Usage) > ul {
-            ul = len(f.Usage)
-        }
-        if len(source) > sl {
-            sl = len(source)
-        }
-    }
-
-    builder.WriteString(
-        fmt.Sprintf("Flag%v\tDefault%v\tDescription%v\tSource%v\n",
-            strings.Repeat(" ", min_zero(nl-4)),
-            strings.Repeat(" ", min_zero(dl-7)),
-            strings.Repeat(" ", min_zero(ul-11)),
-            strings.Repeat(" ", min_zero(sl-6))))
-    builder.WriteString(
-        fmt.Sprintf("%v\t%v\t%v\t%v\n",
-            strings.Repeat("-", min_zero(nl)),
-            strings.Repeat("-", min_zero(dl)),
-            strings.Repeat("-", min_zero(ul)),
-            strings.Repeat("-", min_zero(sl))))
-
-    for _, f := range flags {
-        source := "flag"
-        if _, exists := os.LookupEnv(f.Name); exists {
-            source = "env"
-        }
-        builder.WriteString(fmt.Sprintf("-%-*s\t%-*s\t%-*s\t%s\n", nl, f.Name, dl, f.DefValue, ul, f.Usage, source))
-    }
-
-    return builder.String()
-}
-
-func min_zero(number int) int {
-    if number < 0 {
-        return 0
-    } else {
-        return number
-    }
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Usage of %s:\n", os.Args[0])
+	flag.VisitAll(func(f *flag.Flag) {
+		fmt.Fprintf(&sb, "  -%s: %s (default: %s)\n", f.Name, f.Usage, f.DefValue)
+	})
+	return sb.String()
 }
