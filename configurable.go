@@ -36,7 +36,6 @@ type IConfigurable interface {
 	Duration(name string) *time.Duration
 	NewDuration(name string, value time.Duration, usage string) *time.Duration
 
-	// New methods for List and Map
 	List(name string) *[]string
 	NewList(name string, value []string, usage string) *[]string
 
@@ -49,19 +48,14 @@ type IConfigurable interface {
 	Usage() string
 }
 
-// Configurable implements the IConfigurable interface.
 type Configurable struct {
 	flags map[string]interface{}
 }
 
-// New creates a new Configurable instance.
 func New() IConfigurable {
 	return &Configurable{flags: make(map[string]interface{})}
 }
 
-// Implementations for existing methods
-
-// Int flag methods
 func (c *Configurable) NewInt(name string, value int, usage string) *int {
 	ptr := flag.Int(name, value, usage)
 	c.flags[name] = ptr
@@ -76,11 +70,66 @@ func (c *Configurable) Int(name string) *int {
 	return nil
 }
 
-// Similar methods for Int64, Float64, String, Bool, Duration...
+func (c *Configurable) Int64(name string) *int64 {
+	c.checkAndSetFromEnv(name)
+	val, _ := c.flags[name].(*int64)
+	return val
+}
 
-// New implementations for List and Map
+func (c *Configurable) NewInt64(name string, value int64, usage string) *int64 {
+	var i = flag.Int64(name, value, usage)
+	c.flags[name] = i
+	return i
+}
 
-// ListFlag implements flag.Value for []string
+func (c *Configurable) Float64(name string) *float64 {
+	c.checkAndSetFromEnv(name)
+	val, _ := c.flags[name].(*float64)
+	return val
+}
+
+func (c *Configurable) NewFloat64(name string, value float64, usage string) *float64 {
+	var i = flag.Float64(name, value, usage)
+	c.flags[name] = i
+	return i
+}
+
+func (c *Configurable) Duration(name string) *time.Duration {
+	c.checkAndSetFromEnv(name)
+	val, _ := c.flags[name].(*time.Duration)
+	return val
+}
+
+func (c *Configurable) NewDuration(name string, value time.Duration, usage string) *time.Duration {
+	var i = flag.Duration(name, value, usage)
+	c.flags[name] = i
+	return i
+}
+
+func (c *Configurable) String(name string) *string {
+	c.checkAndSetFromEnv(name)
+	val, _ := c.flags[name].(*string)
+	return val
+}
+
+func (c *Configurable) NewString(name string, value string, usage string) *string {
+	var s = flag.String(name, value, usage)
+	c.flags[name] = s
+	return s
+}
+
+func (c *Configurable) Bool(name string) *bool {
+	c.checkAndSetFromEnv(name)
+	val, _ := c.flags[name].(*bool)
+	return val
+}
+
+func (c *Configurable) NewBool(name string, value bool, usage string) *bool {
+	var b = flag.Bool(name, value, usage)
+	c.flags[name] = b
+	return b
+}
+
 type ListFlag struct {
 	values *[]string
 }
@@ -101,7 +150,6 @@ func (l *ListFlag) Set(value string) error {
 	return nil
 }
 
-// List flag methods
 func (c *Configurable) NewList(name string, value []string, usage string) *[]string {
 	l := &ListFlag{values: &value}
 	flag.Var(l, name, usage)
@@ -117,7 +165,6 @@ func (c *Configurable) List(name string) *[]string {
 	return nil
 }
 
-// MapFlag implements flag.Value for map[string]string
 type MapFlag struct {
 	values *map[string]string
 }
@@ -148,7 +195,6 @@ func (m *MapFlag) Set(value string) error {
 	return nil
 }
 
-// Map flag methods
 func (c *Configurable) NewMap(name string, value map[string]string, usage string) *map[string]string {
 	m := &MapFlag{values: &value}
 	flag.Var(m, name, usage)
@@ -164,7 +210,6 @@ func (c *Configurable) Map(name string) *map[string]string {
 	return nil
 }
 
-// Parse parses command-line flags and loads configuration from a file.
 func (c *Configurable) Parse(filename string) error {
 	flag.Parse()
 	if filename != "" {
@@ -173,7 +218,6 @@ func (c *Configurable) Parse(filename string) error {
 	return nil
 }
 
-// LoadFile loads configuration from a file (JSON, YAML, INI).
 func (c *Configurable) LoadFile(filename string) error {
 	data, err := os.ReadFile(filename)
 	if err != nil {
@@ -192,7 +236,6 @@ func (c *Configurable) LoadFile(filename string) error {
 	}
 }
 
-// Load JSON configuration
 func (c *Configurable) loadJSON(data []byte) error {
 	var jsonData map[string]interface{}
 	if err := json.Unmarshal(data, &jsonData); err != nil {
@@ -201,7 +244,6 @@ func (c *Configurable) loadJSON(data []byte) error {
 	return c.setValuesFromMap(jsonData)
 }
 
-// Load YAML configuration
 func (c *Configurable) loadYAML(data []byte) error {
 	var yamlData map[string]interface{}
 	if err := yaml.Unmarshal(data, &yamlData); err != nil {
@@ -210,7 +252,6 @@ func (c *Configurable) loadYAML(data []byte) error {
 	return c.setValuesFromMap(yamlData)
 }
 
-// Load INI configuration
 func (c *Configurable) loadINI(data []byte) error {
 	cfg, err := ini.Load(data)
 	if err != nil {
@@ -225,7 +266,6 @@ func (c *Configurable) loadINI(data []byte) error {
 	return c.setValuesFromMap(iniData)
 }
 
-// Set values from a map into the flags
 func (c *Configurable) setValuesFromMap(data map[string]interface{}) error {
 	for key, value := range data {
 		if flagVal, exists := c.flags[key]; exists {
@@ -237,7 +277,6 @@ func (c *Configurable) setValuesFromMap(data map[string]interface{}) error {
 	return nil
 }
 
-// Set individual flag value based on its type
 func (c *Configurable) setValue(flagVal interface{}, value interface{}) error {
 	switch ptr := flagVal.(type) {
 	case *int:
@@ -295,12 +334,11 @@ func (c *Configurable) setValue(flagVal interface{}, value interface{}) error {
 			(*ptr.values)[k] = v
 		}
 	default:
-		return fmt.Errorf("unsupported flag type for key %s", key)
+		return fmt.Errorf("unsupported flag type for key %v", ptr)
 	}
 	return nil
 }
 
-// Helper functions for type conversions
 func toInt(value interface{}) (int, error) {
 	switch v := value.(type) {
 	case float64:
@@ -411,7 +449,6 @@ func toStringMap(value interface{}) (map[string]string, error) {
 	}
 }
 
-// checkAndSetFromEnv overrides flag values with environment variables if set.
 func (c *Configurable) checkAndSetFromEnv(name string) {
 	if val, exists := os.LookupEnv(name); exists {
 		if flagVal, exists := c.flags[name]; exists {
@@ -420,7 +457,6 @@ func (c *Configurable) checkAndSetFromEnv(name string) {
 	}
 }
 
-// Usage returns the usage string for the registered flags.
 func (c *Configurable) Usage() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Usage of %s:\n", os.Args[0])
@@ -429,3 +465,4 @@ func (c *Configurable) Usage() string {
 	})
 	return sb.String()
 }
+
